@@ -17,7 +17,7 @@ Drill #4 (concurrent registry) is the one who ships the racy directory server.
 
 | # | Drill | Person A done | Person B done |
 |---|-------|:-------------:|:-------------:|
-| 1 | Echo server | ☐ | ☐ |
+| 1 | Echo server | ☐ | ☑ |
 | 2 | Stream framing (newline + length-prefix) | ☐ | ☐ |
 | 3 | Thread-per-connection + deliberate race | ☐ | ☐ |
 | 4 | Concurrency-safe registry | ☐ | ☐ |
@@ -47,7 +47,7 @@ The natural seam in a directory-server + peer-client system:
 
 **Owner of each side fills in their name:**
 - Person A = `__________`
-- Person B = `__________`
+- Person B = `Baraa` (Peer Client owner)
 
 ### Integration risk (read this)
 The classic two-person failure: each side is built against its author's private
