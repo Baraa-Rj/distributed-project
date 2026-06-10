@@ -11,7 +11,6 @@ DEFAULT_PORT = 5000
 ALIVE_TTL = 3.0
 LIST_INTERVAL = 1.0
 REAP_INTERVAL = 1.0
-MAX_FRAME = 64 * 1024  # cap an unterminated frame to bound memory use
 
 presence = {}
 conns = {}
@@ -19,7 +18,6 @@ state_lock = threading.Lock()
 
 
 def send_json(entry, obj):
-    """Send one JSON frame to a client, serialising writes per-socket."""
     data = (json.dumps(obj) + "\n").encode("utf-8")
     try:
         with entry["lock"]:
@@ -43,9 +41,6 @@ def line_reader(sock):
             line, buf = buf.split(b"\n", 1)
             if line.strip():
                 yield line.decode("utf-8", errors="replace")
-        if len(buf) > MAX_FRAME:
-            # No delimiter within the cap: peer is misbehaving, drop it.
-            return
 
 
 def handle_client(sock, addr):
@@ -120,8 +115,6 @@ def list_broadcaster():
         payload = {"type": "LIST", "clients": active}
         dead = [cid for cid, entry in targets if not send_json(entry, payload)]
         if dead:
-            # A failed send means the socket is gone; reclaim its state so
-            # conns/presence don't leak dead entries.
             with state_lock:
                 for cid in dead:
                     conns.pop(cid, None)

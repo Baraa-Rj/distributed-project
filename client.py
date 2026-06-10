@@ -6,7 +6,6 @@ import threading
 import time
 
 HEARTBEAT_INTERVAL = 1.0
-MAX_FRAME = 64 * 1024  # cap an unterminated frame to bound memory use
 
 
 def send_json(sock, lock, obj):
@@ -33,9 +32,6 @@ def line_reader(sock):
             line, buf = buf.split(b"\n", 1)
             if line.strip():
                 yield line.decode("utf-8", errors="replace")
-        if len(buf) > MAX_FRAME:
-            # No delimiter within the cap: peer is misbehaving, drop it.
-            return
 
 
 class Client:
@@ -130,16 +126,12 @@ class Client:
             return
         _, is_new = self._register_peer(peer_id, sock)
         if not is_new:
-            # Already connected to this peer (outbound race); drop this socket.
             sock.close()
             return
         print(f"\n[connected] '{peer_id}' connected to you")
         self._peer_reader(peer_id, sock, reader)
 
     def _register_peer(self, peer_id, sock):
-        """Register sock for peer_id. Returns (entry, is_new); on collision the
-        existing entry is returned and is_new is False so the caller can close
-        its now-redundant socket."""
         with self.peers_lock:
             existing = self.peers.get(peer_id)
             if existing:
@@ -165,8 +157,6 @@ class Client:
             return
         entry, is_new = self._register_peer(peer_id, sock)
         if not is_new:
-            # An inbound connection from this peer won the race while we were
-            # connecting; close our redundant socket and don't start a reader.
             sock.close()
             if peer_id in self.pending:
                 self.active_peer = peer_id
@@ -206,12 +196,11 @@ class Client:
         send_json(entry["sock"], entry["lock"], {
             "type": "CHAT",
             "src": self.my_id,
-            "ts": time.time(),
             "text": text,
         })
 
     def _input_loop(self):
-        print("Commands: /list  /chat <id>  /msg <id> <text>  /peers  /quit")
+        print("Commands: /list  /chat <id>  /quit")
         while self.running:
             try:
                 line = input("> ")
@@ -225,10 +214,6 @@ class Client:
                 break
             elif line == "/list":
                 print("Active clients:", ", ".join(self.last_list) or "(none)")
-            elif line == "/peers":
-                with self.peers_lock:
-                    print("Connected peers:",
-                          ", ".join(self.peers.keys()) or "(none)")
             elif line.startswith("/chat "):
                 target = line.split(None, 1)[1].strip()
                 if target == self.my_id:
@@ -238,12 +223,6 @@ class Client:
                 send_json(self.dir_sock, self.dir_lock,
                           {"type": "CONNECT_REQ", "src": self.my_id,
                            "dst": target})
-            elif line.startswith("/msg "):
-                parts = line.split(None, 2)
-                if len(parts) < 3:
-                    print("usage: /msg <id> <text>")
-                    continue
-                self._send_chat(parts[1], parts[2])
             else:
                 if self.active_peer:
                     self._send_chat(self.active_peer, line)
